@@ -64,6 +64,8 @@ import { MemoryStore } from './db/memory-store';
 import { createMCPHandler } from './server/mcp-handler';
 import { startEmbeddingWorker } from './memory/embedding-manager';
 import { cleanupMemories } from './memory/memory-decay';
+import { getLicense, getTrialStatus, verifyOnline } from './security/license';
+import { formatPlanStatus } from './security/feature-gate';
 
 // ─── CLI Routing ─────────────────────────────────────────────────────────────
 // Handle subcommands BEFORE starting the MCP server
@@ -161,6 +163,29 @@ try {
         console.log(`[cortex-mcp] Dashboard: http://localhost:${port}`);
     } catch (err: any) {
         console.log(`[cortex-mcp] Dashboard unavailable: ${err.message}`);
+    }
+
+    // ─── License Status & Trial Countdown ─────────────────────────────────────
+    try {
+        const license = getLicense();
+        console.log(`[cortex-mcp] ${formatPlanStatus()}`);
+
+        // Show trial countdown banner
+        const trialStatus = getTrialStatus();
+        if (trialStatus) {
+            console.log(`[cortex-mcp] ${trialStatus}`);
+        }
+
+        // Background online verification (non-blocking)
+        if (license.key) {
+            verifyOnline(license.key).then((updated) => {
+                if (updated.plan !== license.plan) {
+                    console.log(`[cortex-mcp] License updated: ${formatPlanStatus()}`);
+                }
+            }).catch(() => { });
+        }
+    } catch (err: any) {
+        console.log(`[cortex-mcp] License check skipped: ${err.message}`);
     }
 
 } catch (err: any) {

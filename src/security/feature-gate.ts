@@ -1,5 +1,5 @@
 /**
- * Feature Gate — Enforces free/paid limits based on license.
+ * Feature Gate — Enforces free/trial/paid limits based on license.
  *
  * FREE plan limits:
  *   - Max 20 active memories
@@ -10,9 +10,10 @@
  *   - No contradiction detection
  *   - No confidence decay
  *
- * PRO plan: Everything unlocked, unlimited.
+ * TRIAL plan: Same as PRO for 7 days after sign-up.
+ * PRO plan:   Everything unlocked, unlimited.
  */
-import { getLicense, isPro, isFree, Plan } from './license';
+import { getLicense, isPro, isFree, isTrial, getTrialStatus, Plan } from './license';
 
 export interface FeatureLimits {
     maxMemories: number;
@@ -65,9 +66,15 @@ const PRO_LIMITS: FeatureLimits = {
     crossSessionThreading: true,
 };
 
+// Trial gets same limits as PRO
+const TRIAL_LIMITS: FeatureLimits = { ...PRO_LIMITS };
+
 /** Get current feature limits based on license */
 export function getFeatureLimits(): FeatureLimits {
-    return isPro() ? PRO_LIMITS : FREE_LIMITS;
+    const license = getLicense();
+    if (license.plan === 'PRO') return PRO_LIMITS;
+    if (license.plan === 'TRIAL') return TRIAL_LIMITS;
+    return FREE_LIMITS;
 }
 
 /** Check if a specific feature is allowed */
@@ -84,7 +91,7 @@ export function canStoreMemory(currentCount: number): { allowed: boolean; messag
     if (currentCount >= limits.maxMemories) {
         return {
             allowed: false,
-            message: `[LOCKED] Free plan limit: ${limits.maxMemories} memories. Upgrade to PRO for unlimited. Set CORTEX_LICENSE_KEY or visit cortex-mcp.org`,
+            message: `[LOCKED] Free plan limit: ${limits.maxMemories} memories. Upgrade to PRO for unlimited. Visit https://cortex-ai-iota.vercel.app/dashboard`,
         };
     }
     return { allowed: true, message: '' };
@@ -92,7 +99,7 @@ export function canStoreMemory(currentCount: number): { allowed: boolean; messag
 
 /** Get upgrade message for gated features */
 export function getUpgradeMessage(feature: string): string {
-    return `[LOCKED] "${feature}" is a PRO feature. Upgrade at cortex-mcp.org or set CORTEX_LICENSE_KEY to unlock.`;
+    return `[LOCKED] "${feature}" is a PRO feature. Upgrade at https://cortex-ai-iota.vercel.app/dashboard or set CORTEX_LICENSE_KEY to unlock.`;
 }
 
 /** Format plan status for display */
@@ -104,5 +111,10 @@ export function formatPlanStatus(): string {
         return `[PRO] Cortex PRO — All features unlocked, unlimited memories.`;
     }
 
-    return `[FREE] Cortex Free — ${limits.maxMemories} memories, basic features. Upgrade: set CORTEX_LICENSE_KEY`;
+    if (license.plan === 'TRIAL') {
+        const trialMsg = getTrialStatus();
+        return `[TRIAL] Cortex Trial — All PRO features active. ${trialMsg || ''}`;
+    }
+
+    return `[FREE] Cortex Free — ${limits.maxMemories} memories, basic features. Upgrade: https://cortex-ai-iota.vercel.app/dashboard`;
 }
