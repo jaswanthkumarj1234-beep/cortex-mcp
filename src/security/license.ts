@@ -28,42 +28,54 @@ const MAX_RESPONSE_BYTES = 4096;
 let cachedLicense: LicenseInfo | null = null;
 let _initPromise: Promise<LicenseInfo> | null = null;
 
-// ─── HMAC Key Management ──────────────────────────────────────────────────────
-// The HMAC key is a per-machine random secret stored on disk.
-// This ensures the cache file cannot be forged or copied between machines.
+// ─── HMAC Key — Per-Machine Random Secret ─────────────────────────────────────
+// A 32-byte cryptographically random key is generated ONCE and persisted
+// to ~/.cortex/.cache-key (mode 0600). If the file is missing or unreadable,
+// a NEW random key is generated each time (cache simply won't persist across
+// restarts until the filesystem issue is resolved — this is intentionally
+// secure-by-default: no predictable fallback exists).
 
-function getOrCreateHmacKey(): string {
+let _hmacKey: string | null = null;
+
+function getCacheHmacKey(): string {
+    if (_hmacKey) return _hmacKey;
+
     try {
         ensureDir();
+
+        // Try to read existing key
         if (fs.existsSync(KEY_FILE)) {
             const existing = fs.readFileSync(KEY_FILE, 'utf-8').trim();
-            if (existing.length >= 64) return existing;
+            if (existing.length >= 64) {
+                _hmacKey = existing;
+                return _hmacKey;
+            }
         }
-        // Generate a cryptographically random key and persist it
-        const newKey = crypto.randomBytes(32).toString('hex');
-        fs.writeFileSync(KEY_FILE, newKey, { encoding: 'utf-8', mode: 0o600 });
-        return newKey;
-    } catch {
-        // If filesystem fails, derive from machine identity as last resort
-        return crypto.createHash('sha256')
-            .update(`${os.hostname()}:${os.userInfo().username}:${process.pid}`)
-            .digest('hex');
-    }
-}
 
-// Lazily loaded and cached in memory so we only read disk once
-let _hmacKey: string | null = null;
-function getCacheHmacKey(): string {
-    if (!_hmacKey) _hmacKey = getOrCreateHmacKey();
-    return _hmacKey;
+        // No valid key on disk — generate and persist a new one
+        const fresh = crypto.randomBytes(32).toString('hex');
+        fs.writeFileSync(KEY_FILE, fresh, { encoding: 'utf-8', mode: 0o600 });
+        _hmacKey = fresh;
+        return _hmacKey;
+    } catch {
+        // Filesystem failure — use an ephemeral random key for this session.
+        // Cache won't persist across restarts, but integrity is never compromised.
+        _hmacKey = crypto.randomBytes(32).toString('hex');
+        return _hmacKey;
+    }
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Get the current license. On first call without cache, this returns FREE
- * and triggers background verification. Use waitForVerification() at startup
- * to block until the real plan is known.
+ * Synchronous license accessor. Returns the cached license state.
+ *
+ * On the very first call (cold start with no disk cache), this returns
+ * the HMAC-signed cached result if available. If no cache exists, it
+ * starts background verification and returns a "verifying" state.
+ *
+ * For guaranteed accurate results at startup, call `waitForVerification()`
+ * first — it blocks until the server responds (with a configurable timeout).
  */
 export function getLicense(): LicenseInfo {
     if (cachedLicense) return cachedLicense;
@@ -72,26 +84,27 @@ export function getLicense(): LicenseInfo {
 }
 
 /**
- * Wait for the initial online verification to complete (with timeout).
- * Call this once at startup so subsequent getLicense() calls return the real plan.
- * If the verification completes before the timeout, the license is updated immediately.
- * If it times out, falls back to whatever detectLicense returned (cache or FREE).
+ * Async startup helper — waits for online verification to finish.
+ * Call this ONCE at startup, then use getLicense() synchronously afterwards.
+ *
+ * After this resolves, `getLicense()` will return the server-verified plan
+ * (PRO, TRIAL, or FREE) rather than the cold-start "verifying" state.
  */
 export async function waitForVerification(timeoutMs: number = 5000): Promise<LicenseInfo> {
-    // Ensure detectLicense has been called (which sets up _initPromise)
+    // Ensure detectLicense runs first (sets up _initPromise if needed)
     getLicense();
 
     if (_initPromise) {
         try {
             const result = await Promise.race([
                 _initPromise,
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+                new Promise<null>((r) => setTimeout(() => r(null), timeoutMs)),
             ]);
             if (result) {
                 cachedLicense = result;
                 return result;
             }
-        } catch { /* verification failed, fall through */ }
+        } catch { /* timeout or network failure — fall through */ }
     }
     return getLicense();
 }
@@ -140,12 +153,13 @@ export function validateKeyFormat(key: string): boolean {
 
 export async function verifyOnline(key: string): Promise<LicenseInfo> {
     return new Promise((resolve) => {
-        let resolved = false;
-        const safeResolve = (value: LicenseInfo) => {
-            if (resolved) return;
-            resolved = true;
+        let settled = false;
+
+        function settle(value: LicenseInfo): void {
+            if (settled) return;
+            settled = true;
             resolve(value);
-        };
+        }
 
         try {
             const url = new URL(VERIFY_URL);
@@ -162,41 +176,43 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
                 },
                 timeout: 8000,
             }, (res) => {
-                const chunks: Buffer[] = [];
                 let totalBytes = 0;
+                const chunks: Buffer[] = [];
 
                 res.on('data', (chunk: Buffer) => {
-                    totalBytes += chunk.length;
-                    if (totalBytes > MAX_RESPONSE_BYTES) {
-                        req.destroy();
-                        safeResolve(readCacheOrFree(key));
+                    // Enforce response size limit BEFORE accumulating
+                    const incoming = Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+                    if (totalBytes + incoming > MAX_RESPONSE_BYTES) {
+                        res.destroy();
+                        settle(readCacheOrFree(key));
                         return;
                     }
-                    chunks.push(chunk);
+                    totalBytes += incoming;
+                    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)));
                 });
 
                 res.on('end', () => {
                     try {
-                        const data = Buffer.concat(chunks).toString('utf-8');
+                        const data = Buffer.concat(chunks, totalBytes).toString('utf-8');
                         const json = JSON.parse(data);
                         const result = parseServerResponse(json, key);
                         writeCache(result);
                         cachedLicense = result;
-                        safeResolve(result);
+                        settle(result);
                     } catch {
-                        safeResolve(readCacheOrFree(key));
+                        settle(readCacheOrFree(key));
                     }
                 });
 
-                res.on('error', () => safeResolve(readCacheOrFree(key)));
+                res.on('error', () => settle(readCacheOrFree(key)));
             });
 
-            req.on('error', () => safeResolve(readCacheOrFree(key)));
-            req.on('timeout', () => { req.destroy(); safeResolve(readCacheOrFree(key)); });
+            req.on('error', () => settle(readCacheOrFree(key)));
+            req.on('timeout', () => { req.destroy(); settle(readCacheOrFree(key)); });
             req.write(body);
             req.end();
         } catch {
-            safeResolve(readCacheOrFree(key));
+            settle(readCacheOrFree(key));
         }
     });
 }
@@ -206,7 +222,8 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
 function detectLicense(): LicenseInfo {
     const key = readKeyFromDisk();
 
-    // Fast path: HMAC-signed cache matches current key — returns real plan
+    // Fast path: HMAC-verified cache is present and matches the current key.
+    // This returns the real plan (PRO/TRIAL/FREE) from the last server response.
     const cached = readCache();
     if (cached && cached.key === key) return cached;
 
@@ -218,8 +235,7 @@ function detectLicense(): LicenseInfo {
         return { plan: 'FREE', key, valid: false, message: 'Invalid license key format' };
     }
 
-    // No valid cache — start async verification and return FREE until it completes.
-    // Callers should use waitForVerification() at startup to get the real plan.
+    // No valid cache — fire async verification, store promise for waitForVerification()
     _initPromise = verifyOnline(key);
     _initPromise.catch(() => { });
 
