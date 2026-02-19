@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1"/>
+      <stop offset="40%" style="stop-color:#8B5CF6"/>
+      <stop offset="100%" style="stop-color:#EC4899"/>
+    </linearGradient>
+    <linearGradient id="grad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6"/>
+      <stop offset="100%" style="stop-color:#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="grad3" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F59E0B"/>
+      <stop offset="100%" style="stop-color:#EF4444"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4F46E5"/>
+      <stop offset="100%" style="stop-color:#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <!-- White background with subtle warm tint -->
+  <rect width="512" height="512" rx="80" fill="#FAFBFF"/>
+
+  <!-- The Cortex "C" mark made of 4 colored pieces (like Slack/Figma) -->
+  
+  <!-- Top-left arc piece (indigo->purple) -->
+  <path d="M 256 100 
+           A 110 110 0 0 0 146 210" 
+        stroke="url(#grad1)" stroke-width="36" stroke-linecap="round" fill="none"/>
+  
+  <!-- Left-bottom arc piece (blue->purple) -->
+  <path d="M 146 210 
+           A 110 110 0 0 0 256 320" 
+        stroke="url(#grad2)" stroke-width="36" stroke-linecap="round" fill="none"/>
+
+  <!-- Memory dots orbiting the C -->
+  <!-- Top cluster -->
+  <circle cx="280" cy="105" r="14" fill="#6366F1" opacity="0.9"/>
+  <circle cx="310" cy="125" r="8" fill="#8B5CF6" opacity="0.7"/>
+  <circle cx="330" cy="108" r="5" fill="#A78BFA" opacity="0.5"/>
+
+  <!-- Middle-right cluster (represents stored memories) -->
+  <circle cx="340" cy="195" r="12" fill="#3B82F6" opacity="0.8"/>
+  <circle cx="365" cy="215" r="7" fill="#60A5FA" opacity="0.6"/>
+  <circle cx="355" cy="240" r="9" fill="#818CF8" opacity="0.7"/>
+
+  <!-- Bottom cluster -->
+  <circle cx="280" cy="315" r="14" fill="#8B5CF6" opacity="0.9"/>
+  <circle cx="310" cy="295" r="8" fill="#6366F1" opacity="0.7"/>
+  <circle cx="335" cy="310" r="5" fill="#A78BFA" opacity="0.5"/>
+
+  <!-- Connecting lines between memory dots (subtle) -->
+  <g stroke="#C7D2FE" stroke-width="1.5" opacity="0.3">
+    <line x1="280" y1="105" x2="310" y2="125"/>
+    <line x1="310" y1="125" x2="340" y2="195"/>
+    <line x1="340" y1="195" x2="365" y2="215"/>
+    <line x1="340" y1="195" x2="355" y2="240"/>
+    <line x1="355" y1="240" x2="310" y2="295"/>
+    <line x1="310" y1="295" x2="280" y2="315"/>
+    <line x1="280" y1="105" x2="340" y2="195"/>
+    <line x1="340" y1="195" x2="280" y2="315"/>
+  </g>
+
+  <!-- Small sparkle at the center of the C -->
+  <circle cx="220" cy="210" r="6" fill="#E0E7FF"/>
+  <circle cx="220" cy="210" r="3" fill="#6366F1" opacity="0.4"/>
+
+  <!-- CORTEX text -->
+  <text x="256" y="410" text-anchor="middle" font-family="'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif" font-size="56" font-weight="700" letter-spacing="8" fill="url(#textGrad)">CORTEX</text>
+
+  <!-- Tagline -->
+  <text x="256" y="450" text-anchor="middle" font-family="'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif" font-size="14" font-weight="400" letter-spacing="5" fill="#9CA3AF">PERSISTENT AI MEMORY</text>
+</svg>

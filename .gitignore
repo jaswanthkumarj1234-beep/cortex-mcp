@@ -1,0 +1,14 @@
+node_modules/
+dist/
+bin/
+*.db
+*.log
+.env
+.env.*
+.ai/
+coverage/
+*.tgz
+*.vsix
+.DS_Store
+Thumbs.db
+cortex.log

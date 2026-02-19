@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "cortex": {
+            "command": "node",
+            "args": [
+                "C:\\Users\\ASUS\\Desktop\\cognitive-memory\\dist\\mcp-stdio.js",
+                "C:\\Users\\ASUS\\Desktop\\cognitive-memory"
+            ]
+        }
+    }
+}

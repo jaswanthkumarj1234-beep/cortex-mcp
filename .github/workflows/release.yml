@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org'
+      
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # Real world companies run E2E before release
+      - run: npm run test:mcp
+
+  build-binaries:
+    name: Build Binaries
+    needs: build-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: node18-linux-x64
+            output: cortex-linux
+          - os: windows-latest
+            target: node18-win-x64
+            output: cortex-win.exe
+          - os: macos-latest
+            target: node18-macos-x64
+            output: cortex-macos
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      
+      - run: npm ci
+      - run: npm run build
+      
+      # Build directory for pkg
+      - run: npx pkg . --target ${{ matrix.target }} --output bin/${{ matrix.output }}
+
+      # Handle Native Modules (Real World Complexity)
+      # On GitHub Actions, npm ci compiles better-sqlite3 for the HOST OS.
+      # So windows-latest builds windows .node, macos builds macos .node.
+      # This is why we use a matrix!
+      
+      - name: Copy Native Module (Windows)
+        if: matrix.os == 'windows-latest'
+        run: copy node_modules/better-sqlite3/build/Release/better_sqlite3.node bin/
+
+      - name: Copy Native Module (Linux/Mac)
+        if: matrix.os != 'windows-latest'
+        run: cp node_modules/better-sqlite3/build/Release/better_sqlite3.node bin/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.os }}
+          path: bin/
+
+  publish-release:
+    name: Publish Release
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Download all binaries
+      - uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          pattern: binary-*
+          merge-multiple: true
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: binaries/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+
+  publish-npm:
+    name: Publish NPM
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

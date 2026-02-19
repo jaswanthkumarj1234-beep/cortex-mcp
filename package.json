@@ -1,0 +1,87 @@
+{
+  "name": "cortex-mcp",
+  "displayName": "Cortex MCP Server",
+  "description": "Persistent memory for AI coding assistants. Injects context from past sessions into every LLM request.",
+  "version": "1.0.1",
+  "publisher": "cortex",
+  "license": "MIT",
+  "author": "Perla Jaswanth Kumar",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cortex-mcp/server.git"
+  },
+  "homepage": "https://github.com/cortex-mcp/server#readme",
+  "bugs": {
+    "url": "https://github.com/cortex-mcp/server/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "memory",
+    "ai",
+    "llm",
+    "context",
+    "persistent-memory",
+    "coding-assistant",
+    "cursor",
+    "claude",
+    "copilot",
+    "windsurf",
+    "hallucination-detection",
+    "developer-tools"
+  ],
+  "bin": {
+    "cortex-mcp": "./dist/mcp-stdio.js",
+    "cortex-init": "./dist/cli/setup.js",
+    "cortex-setup": "./dist/cli/setup.js",
+    "cortex-capture": "./dist/hooks/git-capture.js",
+    "cortex-hooks": "./dist/hooks/git-hooks.js",
+    "cortex-run": "./dist/hooks/cortex-run.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "main": "./dist/mcp-stdio.js",
+  "types": "./dist/mcp-stdio.d.ts",
+  "scripts": {
+    "start:mcp": "node dist/mcp-stdio.js",
+    "setup": "node dist/cli/setup.js",
+    "test": "node scripts/test-suite.js",
+    "test:enterprise": "node scripts/enterprise-test.js",
+    "test:git": "node scripts/test-git-capture.js",
+    "test:mcp": "node scripts/test-mcp-server.js",
+    "compile": "tsc -p ./",
+    "build": "npm run compile",
+    "watch": "tsc -watch -p ./",
+    "prepublishOnly": "npm run build",
+    "build:bin": "node scripts/build-binaries.js"
+  },
+  "pkg": {
+    "scripts": "dist/**/*.js",
+    "assets": [
+      "dist/**/*",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "bin"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2",
+    "better-sqlite3": "^11.7.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.11.0",
+    "@types/uuid": "^9.0.7",
+    "pkg": "^5.8.1",
+    "typescript": "^5.3.0"
+  }
+}
