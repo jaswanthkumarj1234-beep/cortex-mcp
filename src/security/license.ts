@@ -29,8 +29,14 @@ export interface LicenseInfo {
     daysRemaining?: number;  // Days left in trial
 }
 
-// Secret salt for key validation (change this before publishing)
-const KEY_SALT = 'cortex-mcp-2024-salt';
+// Salt for key validation — read from environment so it's not exposed in source.
+// Server-side key generation uses the same salt stored in Vercel env vars.
+const KEY_SALT = process.env.CORTEX_KEY_SALT || (() => {
+    // Obfuscated fallback — not ideal but better than plain text.
+    // Production keys are validated online regardless.
+    const parts = ['Y29ydGV4', 'LW1jcC0y', 'MDI0LXNh', 'bHQ='];
+    return Buffer.from(parts.join(''), 'base64').toString();
+})();
 const VERIFY_URL = 'https://cortex-ai-iota.vercel.app/api/auth/verify';
 const CACHE_FILE = path.join(os.homedir(), '.cortex', 'license-cache.json');
 
@@ -274,19 +280,25 @@ function fallbackFromCache(key: string): LicenseInfo {
     const cached = loadLicenseCache();
     if (cached && cached.key === key) return cached;
 
-    // No cache, key passes format check → assume valid (offline-first)
-    if (validateKey(key)) {
-        return { plan: 'PRO', key, valid: true, message: '[OK] PRO license (offline validation)' };
-    }
-    return { plan: 'FREE', key, valid: false, message: 'Invalid license key' };
+    // SECURITY: Without online verification, we cannot confirm the key is legitimate.
+    // Fall back to FREE — online verification will upgrade when connectivity returns.
+    return {
+        plan: 'FREE',
+        key,
+        valid: false,
+        message: 'License pending online verification. Connect to internet to activate.',
+    };
 }
 
 // ─── Internal ─────────────────────────────────────────────────────────────────
 
 function detectLicense(): LicenseInfo {
-    // Priority 0: Check cached online verification
+    // Get current key from env or file (before checking cache)
+    const currentKey = getCurrentKey();
+
+    // Priority 0: Check cached online verification (only if key matches)
     const cached = loadLicenseCache();
-    if (cached) return cached;
+    if (cached && cached.key === currentKey) return cached;
 
     // Priority 1: Environment variable
     const envKey = process.env.CORTEX_LICENSE_KEY?.trim();
@@ -320,4 +332,19 @@ function detectLicense(): LicenseInfo {
         valid: false,
         message: 'Free plan (20 memories). Upgrade: https://cortex-ai-iota.vercel.app',
     };
+}
+
+/** Extract the current license key from env or file (without validation) */
+function getCurrentKey(): string | null {
+    const envKey = process.env.CORTEX_LICENSE_KEY?.trim();
+    if (envKey) return envKey;
+
+    try {
+        const licFile = path.join(os.homedir(), '.cortex', 'license');
+        if (fs.existsSync(licFile)) {
+            return fs.readFileSync(licFile, 'utf-8').trim() || null;
+        }
+    } catch { }
+
+    return null;
 }

@@ -180,7 +180,10 @@ try {
         if (license.key) {
             verifyOnline(license.key).then((updated) => {
                 if (updated.plan !== license.plan) {
-                    console.log(`[cortex-mcp] License updated: ${formatPlanStatus()}`);
+                    const planLabel = updated.plan === 'PRO' ? '[PRO] All features unlocked' :
+                        updated.plan === 'TRIAL' ? '[TRIAL] Trial active' :
+                            '[FREE] Free plan';
+                    console.log(`[cortex-mcp] License updated: ${planLabel} — ${updated.message}`);
                 }
             }).catch(() => { });
         }
