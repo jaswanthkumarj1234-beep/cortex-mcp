@@ -21,23 +21,50 @@ export interface LicenseInfo {
 const VERIFY_URL = 'https://cortex-ai-iota.vercel.app/api/auth/verify';
 const CORTEX_DIR = path.join(os.homedir(), '.cortex');
 const CACHE_FILE = path.join(CORTEX_DIR, 'license-cache.json');
+const KEY_FILE = path.join(CORTEX_DIR, '.cache-key');
 const CACHE_TTL_HOURS = 24;
 const MAX_RESPONSE_BYTES = 4096;
 
 let cachedLicense: LicenseInfo | null = null;
 let _initPromise: Promise<LicenseInfo> | null = null;
 
-/**
- * Derive HMAC key from machine identity so cache can't be copied
- * between machines or forged without knowing the local username + hostname.
- */
+// ─── HMAC Key Management ──────────────────────────────────────────────────────
+// The HMAC key is a per-machine random secret stored on disk.
+// This ensures the cache file cannot be forged or copied between machines.
+
+function getOrCreateHmacKey(): string {
+    try {
+        ensureDir();
+        if (fs.existsSync(KEY_FILE)) {
+            const existing = fs.readFileSync(KEY_FILE, 'utf-8').trim();
+            if (existing.length >= 64) return existing;
+        }
+        // Generate a cryptographically random key and persist it
+        const newKey = crypto.randomBytes(32).toString('hex');
+        fs.writeFileSync(KEY_FILE, newKey, { encoding: 'utf-8', mode: 0o600 });
+        return newKey;
+    } catch {
+        // If filesystem fails, derive from machine identity as last resort
+        return crypto.createHash('sha256')
+            .update(`${os.hostname()}:${os.userInfo().username}:${process.pid}`)
+            .digest('hex');
+    }
+}
+
+// Lazily loaded and cached in memory so we only read disk once
+let _hmacKey: string | null = null;
 function getCacheHmacKey(): string {
-    const machineId = `${os.hostname()}:${os.userInfo().username}:cortex`;
-    return crypto.createHash('sha256').update(machineId).digest('hex');
+    if (!_hmacKey) _hmacKey = getOrCreateHmacKey();
+    return _hmacKey;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/**
+ * Get the current license. On first call without cache, this returns FREE
+ * and triggers background verification. Use waitForVerification() at startup
+ * to block until the real plan is known.
+ */
 export function getLicense(): LicenseInfo {
     if (cachedLicense) return cachedLicense;
     cachedLicense = detectLicense();
@@ -46,10 +73,14 @@ export function getLicense(): LicenseInfo {
 
 /**
  * Wait for the initial online verification to complete (with timeout).
- * Call this once at startup so the first getLicense() returns the real plan.
- * Returns the verified license or falls back to whatever detectLicense gave.
+ * Call this once at startup so subsequent getLicense() calls return the real plan.
+ * If the verification completes before the timeout, the license is updated immediately.
+ * If it times out, falls back to whatever detectLicense returned (cache or FREE).
  */
 export async function waitForVerification(timeoutMs: number = 5000): Promise<LicenseInfo> {
+    // Ensure detectLicense has been called (which sets up _initPromise)
+    getLicense();
+
     if (_initPromise) {
         try {
             const result = await Promise.race([
@@ -60,7 +91,7 @@ export async function waitForVerification(timeoutMs: number = 5000): Promise<Lic
                 cachedLicense = result;
                 return result;
             }
-        } catch { }
+        } catch { /* verification failed, fall through */ }
     }
     return getLicense();
 }
@@ -109,6 +140,13 @@ export function validateKeyFormat(key: string): boolean {
 
 export async function verifyOnline(key: string): Promise<LicenseInfo> {
     return new Promise((resolve) => {
+        let resolved = false;
+        const safeResolve = (value: LicenseInfo) => {
+            if (resolved) return;
+            resolved = true;
+            resolve(value);
+        };
+
         try {
             const url = new URL(VERIFY_URL);
             const body = JSON.stringify({ licenseKey: key });
@@ -124,39 +162,41 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
                 },
                 timeout: 8000,
             }, (res) => {
-                let data = '';
-                let bytesRead = 0;
+                const chunks: Buffer[] = [];
+                let totalBytes = 0;
 
-                res.on('data', (chunk: Buffer | string) => {
-                    const chunkStr = typeof chunk === 'string' ? chunk : chunk.toString();
-                    bytesRead += chunkStr.length;
-                    if (bytesRead > MAX_RESPONSE_BYTES) {
+                res.on('data', (chunk: Buffer) => {
+                    totalBytes += chunk.length;
+                    if (totalBytes > MAX_RESPONSE_BYTES) {
                         req.destroy();
-                        resolve(readCacheOrFree(key));
+                        safeResolve(readCacheOrFree(key));
                         return;
                     }
-                    data += chunkStr;
+                    chunks.push(chunk);
                 });
 
                 res.on('end', () => {
                     try {
+                        const data = Buffer.concat(chunks).toString('utf-8');
                         const json = JSON.parse(data);
                         const result = parseServerResponse(json, key);
                         writeCache(result);
                         cachedLicense = result;
-                        resolve(result);
+                        safeResolve(result);
                     } catch {
-                        resolve(readCacheOrFree(key));
+                        safeResolve(readCacheOrFree(key));
                     }
                 });
+
+                res.on('error', () => safeResolve(readCacheOrFree(key)));
             });
 
-            req.on('error', () => resolve(readCacheOrFree(key)));
-            req.on('timeout', () => { req.destroy(); resolve(readCacheOrFree(key)); });
+            req.on('error', () => safeResolve(readCacheOrFree(key)));
+            req.on('timeout', () => { req.destroy(); safeResolve(readCacheOrFree(key)); });
             req.write(body);
             req.end();
         } catch {
-            resolve(readCacheOrFree(key));
+            safeResolve(readCacheOrFree(key));
         }
     });
 }
@@ -166,7 +206,7 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
 function detectLicense(): LicenseInfo {
     const key = readKeyFromDisk();
 
-    // Fast path: signed cache matches current key
+    // Fast path: HMAC-signed cache matches current key — returns real plan
     const cached = readCache();
     if (cached && cached.key === key) return cached;
 
@@ -178,7 +218,8 @@ function detectLicense(): LicenseInfo {
         return { plan: 'FREE', key, valid: false, message: 'Invalid license key format' };
     }
 
-    // Start verification — store the promise so waitForVerification() can await it
+    // No valid cache — start async verification and return FREE until it completes.
+    // Callers should use waitForVerification() at startup to get the real plan.
     _initPromise = verifyOnline(key);
     _initPromise.catch(() => { });
 
