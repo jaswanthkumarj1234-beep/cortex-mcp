@@ -8,11 +8,11 @@
   "author": "Perla Jaswanth Kumar",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cortex-mcp/server.git"
+    "url": "https://github.com/jaswanthkumarj1234-beep/cortex-mcp.git"
   },
-  "homepage": "https://github.com/cortex-mcp/server#readme",
+  "homepage": "https://github.com/jaswanthkumarj1234-beep/cortex-mcp#readme",
   "bugs": {
-    "url": "https://github.com/cortex-mcp/server/issues"
+    "url": "https://github.com/jaswanthkumarj1234-beep/cortex-mcp/issues"
   },
   "engines": {
     "node": ">=18"
