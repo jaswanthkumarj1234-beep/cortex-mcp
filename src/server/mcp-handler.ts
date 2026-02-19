@@ -29,7 +29,7 @@ import { captureGitCommits, detectFileChanges, formatFileChanges } from '../memo
 import { buildExportMap, formatExportMap, storeExportMap } from '../scanners/export-map';
 import { buildArchitectureGraph, formatArchitectureGraph, storeArchitectureGraph } from '../scanners/architecture-graph';
 import { checkRateLimit, getRateLimitStats } from '../security/rate-limiter';
-import { getLicense, isPro, refreshLicense, generateValidKey, saveKey } from '../security/license';
+import { getLicense, isPro, refreshLicense, saveKey } from '../security/license';
 import { getFeatureLimits, canStoreMemory, isFeatureAllowed, getUpgradeMessage, formatPlanStatus } from '../security/feature-gate';
 import { exportMemories } from '../memory/export-import';
 import { isLLMAvailable, getLLMProvider, enhanceMemory } from '../memory/llm-enhancer';

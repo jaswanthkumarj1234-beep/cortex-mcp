@@ -1,16 +1,5 @@
 /**
- * License System — Gates features behind free/trial/paid plans.
- *
- * Key format: CORTEX-XXXX-XXXX-XXXX-XXXX (20 chars + dashes)
- * Keys are validated offline first, then verified online against
- * the Cortex AI API (https://cortex-ai-iota.vercel.app/api/auth/verify).
- *
- * Environment: CORTEX_LICENSE_KEY or ~/.cortex/license file
- *
- * Plans:
- *   FREE:   20 memories, basic recall, no brain layers
- *   TRIAL:  Full PRO features for 7 days (auto-granted on sign-up)
- *   PRO:    Unlimited memories, all 14 brain layers, all features
+ * License validation — online-first, secure.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -25,142 +14,72 @@ export interface LicenseInfo {
     key: string | null;
     valid: boolean;
     message: string;
-    expiresAt?: string;      // ISO date string for trial expiry
-    daysRemaining?: number;  // Days left in trial
+    expiresAt?: string;
+    daysRemaining?: number;
 }
 
-// Salt for key validation — read from environment so it's not exposed in source.
-// Server-side key generation uses the same salt stored in Vercel env vars.
-const KEY_SALT = process.env.CORTEX_KEY_SALT || (() => {
-    // Obfuscated fallback — not ideal but better than plain text.
-    // Production keys are validated online regardless.
-    const parts = ['Y29ydGV4', 'LW1jcC0y', 'MDI0LXNh', 'bHQ='];
-    return Buffer.from(parts.join(''), 'base64').toString();
-})();
 const VERIFY_URL = 'https://cortex-ai-iota.vercel.app/api/auth/verify';
-const CACHE_FILE = path.join(os.homedir(), '.cortex', 'license-cache.json');
+const CORTEX_DIR = path.join(os.homedir(), '.cortex');
+const CACHE_FILE = path.join(CORTEX_DIR, 'license-cache.json');
+const CACHE_HMAC_KEY = 'cortex-cache-integrity';
+const CACHE_TTL_HOURS = 24;
 
 let cachedLicense: LicenseInfo | null = null;
 
-/** Get current license status (cached after first check) */
+// ─── Public API ───────────────────────────────────────────────────────────────
+
 export function getLicense(): LicenseInfo {
     if (cachedLicense) return cachedLicense;
     cachedLicense = detectLicense();
     return cachedLicense;
 }
 
-/** Force re-check license (after user enters a new key) */
 export function refreshLicense(): LicenseInfo {
     cachedLicense = null;
     return getLicense();
 }
 
-/** Check if current plan is PRO (or active trial) */
 export function isPro(): boolean {
-    const license = getLicense();
-    return license.plan === 'PRO' || license.plan === 'TRIAL';
+    const l = getLicense();
+    return l.plan === 'PRO' || l.plan === 'TRIAL';
 }
 
-/** Check if current plan is FREE */
 export function isFree(): boolean {
     return getLicense().plan === 'FREE';
 }
 
-/** Check if user is on trial */
 export function isTrial(): boolean {
     return getLicense().plan === 'TRIAL';
 }
 
-/** Get trial status message */
 export function getTrialStatus(): string | null {
-    const license = getLicense();
-    if (license.plan !== 'TRIAL') return null;
-
-    if (license.daysRemaining !== undefined) {
-        if (license.daysRemaining <= 0) {
-            return '⚠️  Trial expired! Upgrade at https://cortex-ai-iota.vercel.app/dashboard';
-        }
-        if (license.daysRemaining <= 2) {
-            return `🔴 Trial expires in ${license.daysRemaining} day${license.daysRemaining === 1 ? '' : 's'}! Upgrade: https://cortex-ai-iota.vercel.app/dashboard`;
-        }
-        return `⏳ Trial: ${license.daysRemaining} day${license.daysRemaining === 1 ? '' : 's'} remaining`;
-    }
-    return '⏳ Trial active';
+    const l = getLicense();
+    if (l.plan !== 'TRIAL') return null;
+    if (l.daysRemaining === undefined) return null;
+    if (l.daysRemaining <= 0) return 'Trial expired. Upgrade at https://cortex-ai-iota.vercel.app/dashboard';
+    if (l.daysRemaining <= 2) return `Trial expires in ${l.daysRemaining}d. Upgrade: https://cortex-ai-iota.vercel.app/dashboard`;
+    return `Trial: ${l.daysRemaining}d remaining`;
 }
 
-/** Generate a valid license key (for your use when selling) */
-export function generateKey(email: string): string {
-    const raw = crypto.createHash('sha256')
-        .update(KEY_SALT + ':' + email.toLowerCase().trim())
-        .digest('hex')
-        .slice(0, 20)
-        .toUpperCase();
-
-    // Format: CORTEX-XXXX-XXXX-XXXX-XXXX
-    return `CORTEX-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
-}
-
-/** Validate a license key format and checksum */
-export function validateKey(key: string): boolean {
-    if (!key) return false;
-
-    // Must match format: CORTEX-XXXX-XXXX-XXXX-XXXX
-    const pattern = /^CORTEX-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/;
-    if (!pattern.test(key.trim().toUpperCase())) return false;
-
-    // Extract the raw part (remove CORTEX- and dashes)
-    const raw = key.replace(/^CORTEX-/, '').replace(/-/g, '');
-
-    // Validate checksum: last 4 chars must be hash of first 12
-    const payload = raw.slice(0, 12);
-    const checksum = raw.slice(12, 16);
-    const expected = crypto.createHash('md5')
-        .update(KEY_SALT + ':' + payload)
-        .digest('hex')
-        .slice(0, 4)
-        .toUpperCase();
-
-    return checksum === expected;
-}
-
-/** Generate a key with valid checksum (for selling) */
-export function generateValidKey(identifier: string): string {
-    // Generate 12 random chars as payload
-    const payload = crypto.createHash('sha256')
-        .update(KEY_SALT + ':key:' + identifier + ':' + Date.now())
-        .digest('hex')
-        .slice(0, 12)
-        .toUpperCase();
-
-    // Generate checksum from payload
-    const checksum = crypto.createHash('md5')
-        .update(KEY_SALT + ':' + payload)
-        .digest('hex')
-        .slice(0, 4)
-        .toUpperCase();
-
-    const raw = payload + checksum;
-    return `CORTEX-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
-}
-
-/** Save a license key to disk */
 export function saveKey(key: string): void {
-    const dir = path.join(os.homedir(), '.cortex');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'license'), key.trim(), 'utf-8');
+    ensureDir();
+    fs.writeFileSync(path.join(CORTEX_DIR, 'license'), key.trim(), 'utf-8');
+    clearCache();
     refreshLicense();
 }
 
-/**
- * Verify license key online against the Cortex AI server.
- * Called asynchronously — results are cached to ~/.cortex/license-cache.json
- * so the server starts fast and validates in the background.
- */
+export function validateKeyFormat(key: string): boolean {
+    if (!key) return false;
+    return /^CORTEX-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(key.trim().toUpperCase());
+}
+
+// ─── Online Verification ──────────────────────────────────────────────────────
+
 export async function verifyOnline(key: string): Promise<LicenseInfo> {
     return new Promise((resolve) => {
         try {
             const url = new URL(VERIFY_URL);
-            const postData = JSON.stringify({ licenseKey: key });
+            const body = JSON.stringify({ licenseKey: key });
 
             const req = https.request({
                 hostname: url.hostname,
@@ -169,103 +88,137 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(postData),
+                    'Content-Length': Buffer.byteLength(body),
                 },
-                timeout: 5000,
+                timeout: 8000,
             }, (res) => {
                 let data = '';
-                res.on('data', (chunk) => data += chunk);
+                res.on('data', (c) => data += c);
                 res.on('end', () => {
                     try {
                         const json = JSON.parse(data);
-                        const result = parseOnlineResponse(json, key);
-                        saveLicenseCache(result);
+                        const result = parseServerResponse(json, key);
+                        writeCache(result);
                         cachedLicense = result;
                         resolve(result);
                     } catch {
-                        resolve(fallbackFromCache(key));
+                        resolve(readCacheOrFree(key));
                     }
                 });
             });
 
-            req.on('error', () => resolve(fallbackFromCache(key)));
-            req.on('timeout', () => { req.destroy(); resolve(fallbackFromCache(key)); });
-            req.write(postData);
+            req.on('error', () => resolve(readCacheOrFree(key)));
+            req.on('timeout', () => { req.destroy(); resolve(readCacheOrFree(key)); });
+            req.write(body);
             req.end();
         } catch {
-            resolve(fallbackFromCache(key));
+            resolve(readCacheOrFree(key));
         }
     });
 }
 
-/** Parse the API response into a LicenseInfo */
-function parseOnlineResponse(json: any, key: string): LicenseInfo {
+// ─── Internal ─────────────────────────────────────────────────────────────────
+
+function detectLicense(): LicenseInfo {
+    const key = readKeyFromDisk();
+
+    // Try signed cache first (fast startup)
+    const cached = readCache();
+    if (cached && cached.key === key) return cached;
+
+    // No key → FREE
+    if (!key) {
+        return { plan: 'FREE', key: null, valid: false, message: 'Free plan. Upgrade: https://cortex-ai-iota.vercel.app' };
+    }
+
+    // Key exists but no valid cache → FREE until server confirms
+    if (!validateKeyFormat(key)) {
+        return { plan: 'FREE', key, valid: false, message: 'Invalid license key format' };
+    }
+
+    // Start background verification — stay FREE until confirmed
+    verifyOnline(key).catch(() => { });
+    return {
+        plan: 'FREE',
+        key,
+        valid: false,
+        message: 'Verifying license...',
+    };
+}
+
+function parseServerResponse(json: any, key: string): LicenseInfo {
     if (!json.valid) {
-        return {
-            plan: 'FREE',
-            key,
-            valid: false,
-            message: json.error || 'License not valid on server',
-        };
+        return { plan: 'FREE', key, valid: false, message: json.error || 'License not valid' };
     }
 
     const plan: Plan = json.plan?.toUpperCase() === 'PRO' ? 'PRO' :
         json.plan?.toUpperCase() === 'TRIAL' ? 'TRIAL' : 'FREE';
 
-    const result: LicenseInfo = {
-        plan,
-        key,
-        valid: true,
-        message: `[OK] ${plan} license verified online`,
-    };
+    const result: LicenseInfo = { plan, key, valid: true, message: `${plan} license verified` };
 
     if (json.expiresAt) {
         result.expiresAt = json.expiresAt;
-        const now = new Date();
-        const expires = new Date(json.expiresAt);
-        result.daysRemaining = Math.max(0, Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-
+        result.daysRemaining = Math.max(0, Math.ceil((new Date(json.expiresAt).getTime() - Date.now()) / 86400000));
         if (plan === 'TRIAL' && result.daysRemaining <= 0) {
             result.plan = 'FREE';
             result.valid = false;
-            result.message = 'Trial expired — upgrade to PRO at https://cortex-ai-iota.vercel.app/dashboard';
+            result.message = 'Trial expired';
         }
     }
 
     return result;
 }
 
-/** Save license response to cache for offline use */
-function saveLicenseCache(info: LicenseInfo): void {
+function readKeyFromDisk(): string | null {
+    const envKey = process.env.CORTEX_LICENSE_KEY?.trim();
+    if (envKey) return envKey;
+
     try {
-        const dir = path.join(os.homedir(), '.cortex');
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(CACHE_FILE, JSON.stringify({
-            ...info,
-            cachedAt: new Date().toISOString(),
-        }), 'utf-8');
-    } catch { /* ignore */ }
+        const f = path.join(CORTEX_DIR, 'license');
+        if (fs.existsSync(f)) return fs.readFileSync(f, 'utf-8').trim() || null;
+    } catch { }
+    return null;
 }
 
-/** Load cached license response (for offline startup) */
-function loadLicenseCache(): LicenseInfo | null {
+// ─── Signed Cache ─────────────────────────────────────────────────────────────
+
+function computeHmac(data: string): string {
+    return crypto.createHmac('sha256', CACHE_HMAC_KEY).update(data).digest('hex');
+}
+
+function writeCache(info: LicenseInfo): void {
+    try {
+        ensureDir();
+        const payload = JSON.stringify({ ...info, ts: Date.now() });
+        const sig = computeHmac(payload);
+        fs.writeFileSync(CACHE_FILE, JSON.stringify({ payload, sig }), 'utf-8');
+    } catch { }
+}
+
+function readCache(): LicenseInfo | null {
     try {
         if (!fs.existsSync(CACHE_FILE)) return null;
-        const data = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
+        const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
 
-        // Cache expires after 24 hours — force re-verify
-        const cachedAt = new Date(data.cachedAt);
-        const hoursSinceCached = (Date.now() - cachedAt.getTime()) / (1000 * 60 * 60);
-        if (hoursSinceCached > 24) return null;
+        // Verify HMAC signature — reject tampered caches
+        if (!raw.payload || !raw.sig) return null;
+        if (computeHmac(raw.payload) !== raw.sig) {
+            clearCache();
+            return null;
+        }
 
-        // Recalculate days remaining for trial
+        const data = JSON.parse(raw.payload);
+
+        // Expire after TTL
+        if ((Date.now() - data.ts) / 3600000 > CACHE_TTL_HOURS) return null;
+
+        // Recalculate trial days
         if (data.expiresAt) {
-            const expires = new Date(data.expiresAt);
-            data.daysRemaining = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+            data.daysRemaining = Math.max(0, Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / 86400000));
             if (data.plan === 'TRIAL' && data.daysRemaining <= 0) {
                 data.plan = 'FREE';
                 data.valid = false;
-                data.message = 'Trial expired — upgrade to PRO';
+                data.message = 'Trial expired';
             }
         }
 
@@ -275,76 +228,16 @@ function loadLicenseCache(): LicenseInfo | null {
     }
 }
 
-/** Fallback: use cache if online verification fails */
-function fallbackFromCache(key: string): LicenseInfo {
-    const cached = loadLicenseCache();
-    if (cached && cached.key === key) return cached;
-
-    // SECURITY: Without online verification, we cannot confirm the key is legitimate.
-    // Fall back to FREE — online verification will upgrade when connectivity returns.
-    return {
-        plan: 'FREE',
-        key,
-        valid: false,
-        message: 'License pending online verification. Connect to internet to activate.',
-    };
+function readCacheOrFree(key: string): LicenseInfo {
+    const c = readCache();
+    if (c && c.key === key) return c;
+    return { plan: 'FREE', key, valid: false, message: 'Offline — license pending verification' };
 }
 
-// ─── Internal ─────────────────────────────────────────────────────────────────
-
-function detectLicense(): LicenseInfo {
-    // Get current key from env or file (before checking cache)
-    const currentKey = getCurrentKey();
-
-    // Priority 0: Check cached online verification (only if key matches)
-    const cached = loadLicenseCache();
-    if (cached && cached.key === currentKey) return cached;
-
-    // Priority 1: Environment variable
-    const envKey = process.env.CORTEX_LICENSE_KEY?.trim();
-    if (envKey) {
-        if (validateKey(envKey)) {
-            // Schedule async online verification (will update cache)
-            verifyOnline(envKey).catch(() => { });
-            return { plan: 'PRO', key: envKey, valid: true, message: '[OK] PRO license active (from env)' };
-        }
-        return { plan: 'FREE', key: envKey, valid: false, message: '[FAIL] Invalid license key in CORTEX_LICENSE_KEY' };
-    }
-
-    // Priority 2: License file at ~/.cortex/license
-    try {
-        const licFile = path.join(os.homedir(), '.cortex', 'license');
-        if (fs.existsSync(licFile)) {
-            const fileKey = fs.readFileSync(licFile, 'utf-8').trim();
-            if (validateKey(fileKey)) {
-                // Schedule async online verification
-                verifyOnline(fileKey).catch(() => { });
-                return { plan: 'PRO', key: fileKey, valid: true, message: '[OK] PRO license active (from ~/.cortex/license)' };
-            }
-            return { plan: 'FREE', key: fileKey, valid: false, message: '[FAIL] Invalid license key in ~/.cortex/license' };
-        }
-    } catch { }
-
-    // No key found → FREE plan
-    return {
-        plan: 'FREE',
-        key: null,
-        valid: false,
-        message: 'Free plan (20 memories). Upgrade: https://cortex-ai-iota.vercel.app',
-    };
+function clearCache(): void {
+    try { if (fs.existsSync(CACHE_FILE)) fs.unlinkSync(CACHE_FILE); } catch { }
 }
 
-/** Extract the current license key from env or file (without validation) */
-function getCurrentKey(): string | null {
-    const envKey = process.env.CORTEX_LICENSE_KEY?.trim();
-    if (envKey) return envKey;
-
-    try {
-        const licFile = path.join(os.homedir(), '.cortex', 'license');
-        if (fs.existsSync(licFile)) {
-            return fs.readFileSync(licFile, 'utf-8').trim() || null;
-        }
-    } catch { }
-
-    return null;
+function ensureDir(): void {
+    if (!fs.existsSync(CORTEX_DIR)) fs.mkdirSync(CORTEX_DIR, { recursive: true });
 }
