@@ -21,10 +21,20 @@ export interface LicenseInfo {
 const VERIFY_URL = 'https://cortex-ai-iota.vercel.app/api/auth/verify';
 const CORTEX_DIR = path.join(os.homedir(), '.cortex');
 const CACHE_FILE = path.join(CORTEX_DIR, 'license-cache.json');
-const CACHE_HMAC_KEY = 'cortex-cache-integrity';
 const CACHE_TTL_HOURS = 24;
+const MAX_RESPONSE_BYTES = 4096;
 
 let cachedLicense: LicenseInfo | null = null;
+let _initPromise: Promise<LicenseInfo> | null = null;
+
+/**
+ * Derive HMAC key from machine identity so cache can't be copied
+ * between machines or forged without knowing the local username + hostname.
+ */
+function getCacheHmacKey(): string {
+    const machineId = `${os.hostname()}:${os.userInfo().username}:cortex`;
+    return crypto.createHash('sha256').update(machineId).digest('hex');
+}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -34,8 +44,30 @@ export function getLicense(): LicenseInfo {
     return cachedLicense;
 }
 
+/**
+ * Wait for the initial online verification to complete (with timeout).
+ * Call this once at startup so the first getLicense() returns the real plan.
+ * Returns the verified license or falls back to whatever detectLicense gave.
+ */
+export async function waitForVerification(timeoutMs: number = 5000): Promise<LicenseInfo> {
+    if (_initPromise) {
+        try {
+            const result = await Promise.race([
+                _initPromise,
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+            ]);
+            if (result) {
+                cachedLicense = result;
+                return result;
+            }
+        } catch { }
+    }
+    return getLicense();
+}
+
 export function refreshLicense(): LicenseInfo {
     cachedLicense = null;
+    _initPromise = null;
     return getLicense();
 }
 
@@ -93,7 +125,19 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
                 timeout: 8000,
             }, (res) => {
                 let data = '';
-                res.on('data', (c) => data += c);
+                let bytesRead = 0;
+
+                res.on('data', (chunk: Buffer | string) => {
+                    const chunkStr = typeof chunk === 'string' ? chunk : chunk.toString();
+                    bytesRead += chunkStr.length;
+                    if (bytesRead > MAX_RESPONSE_BYTES) {
+                        req.destroy();
+                        resolve(readCacheOrFree(key));
+                        return;
+                    }
+                    data += chunkStr;
+                });
+
                 res.on('end', () => {
                     try {
                         const json = JSON.parse(data);
@@ -122,22 +166,22 @@ export async function verifyOnline(key: string): Promise<LicenseInfo> {
 function detectLicense(): LicenseInfo {
     const key = readKeyFromDisk();
 
-    // Try signed cache first (fast startup)
+    // Fast path: signed cache matches current key
     const cached = readCache();
     if (cached && cached.key === key) return cached;
 
-    // No key → FREE
     if (!key) {
         return { plan: 'FREE', key: null, valid: false, message: 'Free plan. Upgrade: https://cortex-ai-iota.vercel.app' };
     }
 
-    // Key exists but no valid cache → FREE until server confirms
     if (!validateKeyFormat(key)) {
         return { plan: 'FREE', key, valid: false, message: 'Invalid license key format' };
     }
 
-    // Start background verification — stay FREE until confirmed
-    verifyOnline(key).catch(() => { });
+    // Start verification — store the promise so waitForVerification() can await it
+    _initPromise = verifyOnline(key);
+    _initPromise.catch(() => { });
+
     return {
         plan: 'FREE',
         key,
@@ -147,22 +191,30 @@ function detectLicense(): LicenseInfo {
 }
 
 function parseServerResponse(json: any, key: string): LicenseInfo {
-    if (!json.valid) {
-        return { plan: 'FREE', key, valid: false, message: json.error || 'License not valid' };
+    if (!json || typeof json !== 'object') {
+        return { plan: 'FREE', key, valid: false, message: 'Invalid server response' };
     }
 
-    const plan: Plan = json.plan?.toUpperCase() === 'PRO' ? 'PRO' :
-        json.plan?.toUpperCase() === 'TRIAL' ? 'TRIAL' : 'FREE';
+    if (!json.valid) {
+        const errMsg = typeof json.error === 'string' ? json.error.slice(0, 200) : 'License not valid';
+        return { plan: 'FREE', key, valid: false, message: errMsg };
+    }
+
+    const rawPlan = typeof json.plan === 'string' ? json.plan.toUpperCase() : '';
+    const plan: Plan = rawPlan === 'PRO' ? 'PRO' : rawPlan === 'TRIAL' ? 'TRIAL' : 'FREE';
 
     const result: LicenseInfo = { plan, key, valid: true, message: `${plan} license verified` };
 
-    if (json.expiresAt) {
-        result.expiresAt = json.expiresAt;
-        result.daysRemaining = Math.max(0, Math.ceil((new Date(json.expiresAt).getTime() - Date.now()) / 86400000));
-        if (plan === 'TRIAL' && result.daysRemaining <= 0) {
-            result.plan = 'FREE';
-            result.valid = false;
-            result.message = 'Trial expired';
+    if (typeof json.expiresAt === 'string') {
+        result.expiresAt = json.expiresAt.slice(0, 30);
+        const expiryMs = new Date(json.expiresAt).getTime();
+        if (!isNaN(expiryMs)) {
+            result.daysRemaining = Math.max(0, Math.ceil((expiryMs - Date.now()) / 86400000));
+            if (plan === 'TRIAL' && result.daysRemaining <= 0) {
+                result.plan = 'FREE';
+                result.valid = false;
+                result.message = 'Trial expired';
+            }
         }
     }
 
@@ -183,7 +235,7 @@ function readKeyFromDisk(): string | null {
 // ─── Signed Cache ─────────────────────────────────────────────────────────────
 
 function computeHmac(data: string): string {
-    return crypto.createHmac('sha256', CACHE_HMAC_KEY).update(data).digest('hex');
+    return crypto.createHmac('sha256', getCacheHmacKey()).update(data).digest('hex');
 }
 
 function writeCache(info: LicenseInfo): void {
@@ -200,7 +252,6 @@ function readCache(): LicenseInfo | null {
         if (!fs.existsSync(CACHE_FILE)) return null;
         const raw = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf-8'));
 
-        // Verify HMAC signature — reject tampered caches
         if (!raw.payload || !raw.sig) return null;
         if (computeHmac(raw.payload) !== raw.sig) {
             clearCache();
@@ -209,10 +260,8 @@ function readCache(): LicenseInfo | null {
 
         const data = JSON.parse(raw.payload);
 
-        // Expire after TTL
         if ((Date.now() - data.ts) / 3600000 > CACHE_TTL_HOURS) return null;
 
-        // Recalculate trial days
         if (data.expiresAt) {
             data.daysRemaining = Math.max(0, Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / 86400000));
             if (data.plan === 'TRIAL' && data.daysRemaining <= 0) {

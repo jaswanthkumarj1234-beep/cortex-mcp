@@ -64,7 +64,7 @@ import { MemoryStore } from './db/memory-store';
 import { createMCPHandler } from './server/mcp-handler';
 import { startEmbeddingWorker } from './memory/embedding-manager';
 import { cleanupMemories } from './memory/memory-decay';
-import { getLicense, getTrialStatus, verifyOnline } from './security/license';
+import { getLicense, getTrialStatus, verifyOnline, waitForVerification } from './security/license';
 import { formatPlanStatus } from './security/feature-gate';
 
 // ─── CLI Routing ─────────────────────────────────────────────────────────────
@@ -167,26 +167,19 @@ try {
 
     // ─── License Status & Trial Countdown ─────────────────────────────────────
     try {
-        const license = getLicense();
-        console.log(`[cortex-mcp] ${formatPlanStatus()}`);
+        // Get initial license (may be FREE if no cache yet)
+        getLicense();
 
-        // Show trial countdown banner
-        const trialStatus = getTrialStatus();
-        if (trialStatus) {
-            console.log(`[cortex-mcp] ${trialStatus}`);
-        }
-
-        // Background online verification (non-blocking)
-        if (license.key) {
-            verifyOnline(license.key).then((updated) => {
-                if (updated.plan !== license.plan) {
-                    const planLabel = updated.plan === 'PRO' ? '[PRO] All features unlocked' :
-                        updated.plan === 'TRIAL' ? '[TRIAL] Trial active' :
-                            '[FREE] Free plan';
-                    console.log(`[cortex-mcp] License updated: ${planLabel} — ${updated.message}`);
-                }
-            }).catch(() => { });
-        }
+        // Wait up to 5s for online verification so the first status shows real plan
+        waitForVerification(5000).then((verified) => {
+            console.log(`[cortex-mcp] ${formatPlanStatus()}`);
+            const trialStatus = getTrialStatus();
+            if (trialStatus) {
+                console.log(`[cortex-mcp] ${trialStatus}`);
+            }
+        }).catch(() => {
+            console.log(`[cortex-mcp] ${formatPlanStatus()}`);
+        });
     } catch (err: any) {
         console.log(`[cortex-mcp] License check skipped: ${err.message}`);
     }
