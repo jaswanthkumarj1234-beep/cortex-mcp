@@ -257,7 +257,7 @@ function extractLocalImports(content: string, currentFile: string): string[] {
     for (const pattern of patterns) {
         let match;
         while ((match = pattern.exec(content)) !== null) {
-            let importPath = match[1];
+            const importPath = match[1];
             // Resolve relative path
             let resolved = path.posix.join(currentDir, importPath);
             // Normalize extensions

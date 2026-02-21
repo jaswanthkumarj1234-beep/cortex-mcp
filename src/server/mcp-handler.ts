@@ -1272,7 +1272,7 @@ export function createMCPHandler(memoryStore: MemoryStore, eventLog: EventLog, w
             }
 
             // Extract memory-worthy patterns (regex-based)
-            let extracted = extractMemories(text);
+            const extracted = extractMemories(text);
 
             // LLM enhancement: when API key is available and regex found nothing,
             // use LLM to catch implicit patterns that keywords miss
