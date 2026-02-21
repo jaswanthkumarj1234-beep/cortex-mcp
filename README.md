@@ -35,7 +35,7 @@ Then add to your MCP config:
 
 ### Option 2: Clone from source
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/jaswanthkumarj1234-beep/cortex-mcp.git
 cd cognitive-memory
 npm install
 npm run build
@@ -57,10 +57,10 @@ Then add to your MCP config:
 Restart your IDE and Cortex is active.
 
 ### Option 3: Direct Download (Binaries)
-No Node.js required. Just download and run.
-- [Windows](https://github.com/cortex-mcp/server/releases/latest/download/cortex-win.exe)
-- [macOS](https://github.com/cortex-mcp/server/releases/latest/download/cortex-macos)
-- [Linux](https://github.com/cortex-mcp/server/releases/latest/download/cortex-linux)
+No Node.js required. Download from the latest release:
+- [Windows](https://github.com/jaswanthkumarj1234-beep/cortex-mcp/releases/latest/download/cortex-win.exe)
+- [macOS](https://github.com/jaswanthkumarj1234-beep/cortex-mcp/releases/latest/download/cortex-macos)
+- [Linux](https://github.com/jaswanthkumarj1234-beep/cortex-mcp/releases/latest/download/cortex-linux)
 
 Then configure your MCP client to run the executable directly.
 
@@ -186,7 +186,7 @@ Cortex is open core. The basic version is free forever. To unlock deep cognitive
 | **Contradiction Detection** | No | Yes |
 
 ### Activate PRO
-1. Get a license key from [cortex-mcp.org](https://cortex-mcp.org)
+1. Get a license key from [cortex-website-theta.vercel.app](https://cortex-website-theta.vercel.app/dashboard)
 2. Set it in your environment:
    ```bash
    # Option A: Environment variable

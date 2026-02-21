@@ -5,8 +5,8 @@ Thank you for your interest in contributing! Here's how to get started.
 ## Development Setup
 
 ```bash
-git clone https://github.com/cortex-mcp/server.git
-cd server
+git clone https://github.com/jaswanthkumarj1234-beep/cortex-mcp.git
+cd cortex-mcp
 npm install
 npm run build
 npm test
