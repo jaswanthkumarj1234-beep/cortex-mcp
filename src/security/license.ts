@@ -18,7 +18,7 @@ export interface LicenseInfo {
     daysRemaining?: number;
 }
 
-const VERIFY_URL = 'https://cortex-ai-iota.vercel.app/api/auth/verify';
+const VERIFY_URL = 'https://cortex-website-theta.vercel.app/api/auth/verify';
 const CORTEX_DIR = path.join(os.homedir(), '.cortex');
 const CACHE_FILE = path.join(CORTEX_DIR, 'license-cache.json');
 const KEY_FILE = path.join(CORTEX_DIR, '.cache-key');
@@ -132,8 +132,8 @@ export function getTrialStatus(): string | null {
     const l = getLicense();
     if (l.plan !== 'TRIAL') return null;
     if (l.daysRemaining === undefined) return null;
-    if (l.daysRemaining <= 0) return 'Trial expired. Upgrade at https://cortex-ai-iota.vercel.app/dashboard';
-    if (l.daysRemaining <= 2) return `Trial expires in ${l.daysRemaining}d. Upgrade: https://cortex-ai-iota.vercel.app/dashboard`;
+    if (l.daysRemaining <= 0) return 'Trial expired. Upgrade at https://cortex-website-theta.vercel.app/dashboard';
+    if (l.daysRemaining <= 2) return `Trial expires in ${l.daysRemaining}d. Upgrade: https://cortex-website-theta.vercel.app/dashboard`;
     return `Trial: ${l.daysRemaining}d remaining`;
 }
 
@@ -228,7 +228,7 @@ function detectLicense(): LicenseInfo {
     if (cached && cached.key === key) return cached;
 
     if (!key) {
-        return { plan: 'FREE', key: null, valid: false, message: 'Free plan. Upgrade: https://cortex-ai-iota.vercel.app' };
+        return { plan: 'FREE', key: null, valid: false, message: 'Free plan. Upgrade: https://cortex-website-theta.vercel.app' };
     }
 
     if (!validateKeyFormat(key)) {
