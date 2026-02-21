@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability, please report it responsibly:
 
-**Email**: security@cortex-mcp.dev
+**Email**: perlajaswanthkumar@gmail.com
 
 **Do NOT** open a public GitHub issue for security vulnerabilities.
 
