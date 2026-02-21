@@ -2,7 +2,7 @@
   "name": "cortex-mcp",
   "displayName": "Cortex MCP Server",
   "description": "Persistent memory for AI coding assistants. Injects context from past sessions into every LLM request.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "publisher": "cortex",
   "license": "MIT",
   "author": "Perla Jaswanth Kumar",
