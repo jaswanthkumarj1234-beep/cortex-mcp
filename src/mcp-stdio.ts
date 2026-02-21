@@ -85,10 +85,10 @@ if (firstArg === 'setup') {
 Cortex MCP Server — Persistent memory for AI coding assistants
 
 USAGE:
-  npx @cortex-mcp/server                  Start MCP server (used by AI clients)
-  npx @cortex-mcp/server setup            Auto-configure your AI client
-  npx @cortex-mcp/server --version        Show version
-  npx @cortex-mcp/server --help           Show this help
+  npx cortex-mcp                           Start MCP server (used by AI clients)
+  npx cortex-mcp setup                     Auto-configure your AI client
+  npx cortex-mcp --version                 Show version
+  npx cortex-mcp --help                    Show this help
 
 COMPANION TOOLS (installed automatically):
   cortex-setup                             Configure AI client + git hooks
@@ -107,7 +107,7 @@ SUPPORTED AI CLIENTS:
   Antigravity, Claude Desktop, Cursor, GitHub Copilot, Windsurf, Zed
   Also works with: Claude Code (terminal), any MCP-compatible client
 
-DOCS: https://github.com/cortex-mcp/server
+DOCS: https://github.com/jaswanthkumarj1234-beep/cortex-mcp
 `);
     process.exit(0);
 }

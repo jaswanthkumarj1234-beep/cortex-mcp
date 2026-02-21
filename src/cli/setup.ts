@@ -64,7 +64,7 @@ const CLIENTS: Record<string, ClientConfig> = {
 
 const SERVER_ENTRY = {
     command: 'npx',
-    args: ['-y', '@cortex-mcp/server'],
+    args: ['-y', 'cortex-mcp'],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

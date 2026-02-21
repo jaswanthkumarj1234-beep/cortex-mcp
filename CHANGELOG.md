@@ -39,7 +39,7 @@ All notable changes to Cortex MCP Server are documented here.
 - **Optional LLM enhancement** — OpenAI/Anthropic/compatible APIs for smarter classification
 - **Web dashboard** — localhost:3456 with memory viewer, search, export
 - **`cortex-setup` CLI** — Auto-configures Antigravity, Claude, Cursor, Copilot, Windsurf, Zed
-- **CLI routing** — `npx @cortex-mcp/server setup` and `--version` subcommands
+- **CLI routing** — `npx cortex-mcp setup` and `--version` subcommands
 - **Quality gates** — Junk rejection, contradiction detection, deduplication
 - **Rate limiting** — 30 stores, 100 auto-learns, 500 calls per session
 - **Memory decay** — Stale/low-quality memories cleaned automatically
