@@ -186,7 +186,7 @@ Cortex is open core. The basic version is free forever. To unlock deep cognitive
 | **Contradiction Detection** | No | Yes |
 
 ### Activate PRO
-1. Get a license key from [cortex-website-theta.vercel.app](https://cortex-website-theta.vercel.app/dashboard)
+1. Get a license key from your [Cortex AI Dashboard](https://cortex-website-theta.vercel.app/dashboard)
 2. Set it in your environment:
    ```bash
    # Option A: Environment variable

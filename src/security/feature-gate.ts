@@ -15,6 +15,8 @@
  */
 import { getLicense, isPro, isFree, isTrial, getTrialStatus, Plan } from './license';
 
+const DASHBOARD_URL = `${process.env.CORTEX_API_URL || 'https://cortex-website-theta.vercel.app'}/dashboard`;
+
 export interface FeatureLimits {
     maxMemories: number;
     brainLayers: boolean;       // 14-layer force_recall
@@ -91,7 +93,7 @@ export function canStoreMemory(currentCount: number): { allowed: boolean; messag
     if (currentCount >= limits.maxMemories) {
         return {
             allowed: false,
-            message: `[LOCKED] Free plan limit: ${limits.maxMemories} memories. Upgrade to PRO for unlimited. Visit https://cortex-website-theta.vercel.app/dashboard`,
+            message: `[LOCKED] Free plan limit: ${limits.maxMemories} memories. Upgrade to PRO for unlimited. Visit ${DASHBOARD_URL}`,
         };
     }
     return { allowed: true, message: '' };
@@ -99,7 +101,7 @@ export function canStoreMemory(currentCount: number): { allowed: boolean; messag
 
 /** Get upgrade message for gated features */
 export function getUpgradeMessage(feature: string): string {
-    return `[LOCKED] "${feature}" is a PRO feature. Upgrade at https://cortex-website-theta.vercel.app/dashboard or set CORTEX_LICENSE_KEY to unlock.`;
+    return `[LOCKED] "${feature}" is a PRO feature. Upgrade at ${DASHBOARD_URL} or set CORTEX_LICENSE_KEY to unlock.`;
 }
 
 /** Format plan status for display */
@@ -116,5 +118,5 @@ export function formatPlanStatus(): string {
         return `[TRIAL] Cortex Trial — All PRO features active. ${trialMsg || ''}`;
     }
 
-    return `[FREE] Cortex Free — ${limits.maxMemories} memories, basic features. Upgrade: https://cortex-website-theta.vercel.app/dashboard`;
+    return `[FREE] Cortex Free — ${limits.maxMemories} memories, basic features. Upgrade: ${DASHBOARD_URL}`;
 }
