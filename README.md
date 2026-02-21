@@ -1,5 +1,11 @@
 # Cortex MCP — Persistent AI Memory
 
+[![npm version](https://img.shields.io/npm/v/cortex-mcp.svg)](https://www.npmjs.com/package/cortex-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/cortex-mcp.svg)](https://www.npmjs.com/package/cortex-mcp)
+[![CI](https://github.com/jaswanthkumarj1234-beep/cortex-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jaswanthkumarj1234-beep/cortex-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+
 > Give your AI coding assistant a brain that remembers across sessions.
 
 Cortex is an MCP (Model Context Protocol) server that provides persistent, intelligent memory to any AI coding assistant — Cursor, Claude Code, Windsurf, Cline, or any MCP-compatible tool.
@@ -196,6 +202,87 @@ Cortex is open core. The basic version is free forever. To unlock deep cognitive
    echo CORTEX-XXXX-XXXX-XXXX-XXXX > ~/.cortex/license
    ```
 3. Restart your IDE / MCP server.
+
+## Architecture
+
+```mermaid
+graph TB
+    AI["AI Client (Cursor, Claude, etc.)"]
+    MCP["MCP Server (stdio)"]
+    ML["Memory Layer"]
+    DB["SQLite Database"]
+    SEC["Security Layer"]
+    API["License API"]
+
+    AI -->|"JSON-RPC via stdio"| MCP
+    MCP --> ML
+    ML --> DB
+    MCP --> SEC
+    SEC -->|"verify license"| API
+
+    subgraph "Memory Layer"
+        ML --> EMB["Embedding Manager"]
+        ML --> AL["Auto-Learner"]
+        ML --> QG["Quality Gates"]
+        ML --> TD["Temporal Decay"]
+    end
+
+    subgraph "Retrieval"
+        ML --> HR["Hybrid Retriever"]
+        HR --> VS["Vector Search"]
+        HR --> FTS["Full-Text Search"]
+        HR --> RR["Recency Ranker"]
+    end
+```
+
+## FAQ / Troubleshooting
+
+<details>
+<summary><strong>Cortex doesn't start or my AI client can't connect</strong></summary>
+
+1. Make sure Node.js >=18 is installed: `node --version`
+2. Try running manually: `npx cortex-mcp` — check stderr for errors
+3. Check if another Cortex instance is running on the same workspace
+4. Delete the cache and restart: `rm -rf .ai/brain-data`
+</details>
+
+<details>
+<summary><strong>Memories aren't being recalled</strong></summary>
+
+1. Confirm your AI client's system prompt includes the Cortex rules (run `cortex-setup` to install them)
+2. Check the dashboard at `http://localhost:3456` to see stored memories
+3. Verify memories exist: the AI should call `force_recall` at conversation start
+</details>
+
+<details>
+<summary><strong>"better-sqlite3" build errors on install</strong></summary>
+
+`better-sqlite3` requires a C++ compiler:
+- **Windows**: Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- **macOS**: Run `xcode-select --install`
+- **Linux**: Run `sudo apt-get install build-essential python3`
+</details>
+
+<details>
+<summary><strong>License key not working</strong></summary>
+
+1. Verify the key format: `CORTEX-XXXX-XXXX-XXXX-XXXX`
+2. Check your internet connection (license is verified online on first use)
+3. Clear the cache: `rm ~/.cortex/license-cache.json`
+4. Try setting it via environment variable: `export CORTEX_LICENSE_KEY=CORTEX-...`
+</details>
+
+<details>
+<summary><strong>Dashboard not loading</strong></summary>
+
+1. Default port is 3456. Check if something else is using it: `lsof -i :3456`
+2. Set a custom port: `export CORTEX_PORT=4000`
+3. The dashboard URL is shown in your AI client's stderr on startup
+</details>
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding conventions, and the PR process.
 
 ## License
 

@@ -5,6 +5,9 @@
   "version": "1.0.3",
   "publisher": "cortex",
   "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "author": "Perla Jaswanth Kumar",
   "repository": {
     "type": "git",
@@ -13,9 +16,6 @@
   "homepage": "https://cortex-website-theta.vercel.app",
   "bugs": {
     "url": "https://github.com/jaswanthkumarj1234-beep/cortex-mcp/issues"
-  },
-  "engines": {
-    "node": ">=18"
   },
   "keywords": [
     "mcp",

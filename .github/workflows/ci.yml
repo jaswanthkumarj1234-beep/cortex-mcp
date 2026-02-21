@@ -38,3 +38,7 @@ jobs:
       run: |
         # Start Xvfb or headless if needed? No, stdio test is headless.
         npm run test:mcp
+
+    - name: Security Audit
+      run: npm audit --audit-level=high
+      continue-on-error: true  # Don't fail CI on advisory-only issues
