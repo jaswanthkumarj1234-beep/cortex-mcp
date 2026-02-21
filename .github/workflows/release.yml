@@ -69,7 +69,7 @@ jobs:
         if: matrix.os != 'windows-latest'
         run: cp node_modules/better-sqlite3/build/Release/better_sqlite3.node bin/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: binary-${{ matrix.os }}
           path: bin/
